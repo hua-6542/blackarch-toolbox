@@ -11,6 +11,24 @@ go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
 wails build        # 产物: build/bin/blackarch-toolbox
 ```
 
+## 新机器从零重建
+
+```bash
+git clone https://github.com/hua-6542/blackarch-toolbox.git
+cd blackarch-toolbox
+sudo pacman -S --needed webkit2gtk-4.1 gtk3   # 系统依赖
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+export PATH=$PATH:~/go/bin
+wails build
+./build/bin/blackarch-toolbox
+```
+
+注意：
+
+- 首次启动自动建库（`~/.local/share/blackarch-toolbox/toolbox.db`）并导入内置的 131 个工具
+- VM/容器连接走 `~/.config/blackarch-toolbox/config.yaml`（见下）；开发机实际容器名为 `blackarch`，示例默认值为 `blackarch-tools`
+- VM 执行依赖 SSH 免密：先 `ssh-copy-id blackarch@192.168.122.2`，应用强制 `BatchMode=yes`，未配置免密会直接报错
+
 ## 运行
 
 ```bash
