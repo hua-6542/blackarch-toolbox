@@ -219,6 +219,8 @@ podman:
   container: "blackarch-tools"
 ```
 
+> 注意：开发机（EDITH）上实际容器名为 `blackarch`（当前 Exited 状态）。默认值保持需求文档的 `blackarch-tools`，开发机通过 config.yaml 覆盖为 `blackarch` 进行验证。
+
 ## 11. 前端界面（Vue 3 + Vite，中文，深色主题）
 
 - **App.vue**：三栏布局（左分类树 / 右卡片网格 / 底部状态栏）
