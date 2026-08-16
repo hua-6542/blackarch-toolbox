@@ -25,8 +25,8 @@ func TestOpenMigratesAndSeeds(t *testing.T) {
 	if err := d.conn.QueryRow("SELECT COUNT(*) FROM tools").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 3 {
-		t.Fatalf("seed 后 tools 行数 = %d, want 3", n)
+	if n < 100 {
+		t.Fatalf("seed 后 tools 行数 = %d, want >= 100", n)
 	}
 	for _, table := range []string{"tools", "executions", "preferences"} {
 		var name string
@@ -42,8 +42,8 @@ func TestSeedIdempotent(t *testing.T) {
 	d.Seed()
 	var n int
 	d.conn.QueryRow("SELECT COUNT(*) FROM tools").Scan(&n)
-	if n != 3 {
-		t.Fatalf("重复 seed 后 = %d, want 3", n)
+	if n < 100 {
+		t.Fatalf("重复 seed 后 = %d, want >= 100", n)
 	}
 }
 
@@ -53,15 +53,20 @@ func TestListToolsByCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 3 {
-		t.Fatalf("ListTools(\"\") = %d, want 3", len(all))
+	if len(all) < 100 {
+		t.Fatalf("ListTools(\"\") = %d, want >= 100", len(all))
 	}
 	scan, err := d.ListTools("scanner")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(scan) != 1 || scan[0].Name != "nmap" {
-		t.Fatalf("ListTools(scanner) = %+v", scan)
+	if len(scan) < 1 {
+		t.Fatalf("ListTools(scanner) 应至少返回 1 个工具")
+	}
+	for _, tool := range scan {
+		if tool.Category != "scanner" {
+			t.Fatalf("ListTools(scanner) 混入 %s 分类工具: %+v", tool.Category, tool)
+		}
 	}
 }
 
@@ -130,5 +135,53 @@ func TestGetPreferenceNotFound(t *testing.T) {
 	d := newTestDB(t)
 	if _, ok, err := d.GetPreference(999); err != nil || ok {
 		t.Fatalf("不存在的 tool_id: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSeedFullDataset(t *testing.T) {
+	d := newTestDB(t)
+	var n int
+	if err := d.conn.QueryRow("SELECT COUNT(*) FROM tools").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n < 100 {
+		t.Fatalf("工具数 = %d, want >= 100", n)
+	}
+	var cats int
+	if err := d.conn.QueryRow("SELECT COUNT(DISTINCT category) FROM tools").Scan(&cats); err != nil {
+		t.Fatal(err)
+	}
+	if cats < 10 {
+		t.Fatalf("分类数 = %d, want >= 10", cats)
+	}
+	nmap, err := d.GetTool("nmap")
+	if err != nil {
+		t.Fatalf("nmap 应存在: %v", err)
+	}
+	if nmap.Description == "" || nmap.Icon == "" {
+		t.Fatalf("nmap 缺中文描述或图标: %+v", nmap)
+	}
+	msf, err := d.GetTool("metasploit")
+	if err != nil {
+		t.Fatalf("metasploit 应存在: %v", err)
+	}
+	if !msf.IsHighRisk {
+		t.Fatalf("metasploit 应为高危")
+	}
+	beef, err := d.GetTool("beef-xss")
+	if err != nil {
+		t.Fatalf("beef-xss 应存在: %v", err)
+	}
+	if len(beef.Dependencies) == 0 {
+		t.Fatalf("beef-xss 应声明依赖")
+	}
+	for _, name := range []string{"volatility", "reaver", "bully", "bettercap", "aircrack-ng", "mdk3", "mdk4"} {
+		tool, err := d.GetTool(name)
+		if err != nil {
+			t.Fatalf("%s 应存在: %v", name, err)
+		}
+		if !tool.IsHighRisk {
+			t.Fatalf("%s 应为高危", name)
+		}
 	}
 }
