@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os/exec"
 	"strconv"
+	"strings"
 
+	"mvdan.cc/sh/v3/shell"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -25,7 +27,15 @@ func (v *VM) Run(ctx context.Context, tool, args, workDir string, onLine func(st
 	if err != nil {
 		return -1, fmt.Errorf("workDir 无法引用: %w", err)
 	}
-	remote := fmt.Sprintf("mkdir -p %s && cd %s && %s %s", wd, wd, tool, args)
+	tokens, err := shell.Fields(args, nil)
+	if err != nil {
+		return -1, fmt.Errorf("参数解析失败: %w", err)
+	}
+	quoted, err := quoteCommand(tool, tokens)
+	if err != nil {
+		return -1, err
+	}
+	remote := fmt.Sprintf("mkdir -p %s && cd %s && %s", wd, wd, strings.Join(quoted, " "))
 	full := []string{
 		"-p", strconv.Itoa(v.Port),
 		"-o", "BatchMode=yes",

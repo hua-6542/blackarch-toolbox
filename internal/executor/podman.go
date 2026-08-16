@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 
+	"mvdan.cc/sh/v3/shell"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -22,7 +24,15 @@ func (p *Podman) Run(ctx context.Context, tool, args, workDir string, onLine fun
 	if err != nil {
 		return -1, fmt.Errorf("workDir 无法引用: %w", err)
 	}
-	cmdLine := fmt.Sprintf("cd %s && %s %s", wd, tool, args)
+	tokens, err := shell.Fields(args, nil)
+	if err != nil {
+		return -1, fmt.Errorf("参数解析失败: %w", err)
+	}
+	quoted, err := quoteCommand(tool, tokens)
+	if err != nil {
+		return -1, err
+	}
+	cmdLine := fmt.Sprintf("cd %s && %s", wd, strings.Join(quoted, " "))
 	full := []string{"exec", "-i", p.Container, "/bin/bash", "-lc", cmdLine}
 	code, err := p.runOnce(ctx, full, onLine)
 	if err == nil && code == 125 {

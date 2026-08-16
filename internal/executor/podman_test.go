@@ -78,3 +78,36 @@ func TestPodmanRetryOn125(t *testing.T) {
 		t.Fatalf("重试应为 exec: %s", joined)
 	}
 }
+
+func TestPodmanRunQuotesMetachars(t *testing.T) {
+	p := NewPodman("blackarch-tools")
+	p.ExecCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		return helperCommandExit(0, args...)
+	}
+	if _, err := p.Run(context.Background(), "nmap", "-sV; echo pwned", "/work/dir", nil); err == nil {
+		t.Fatal("含 ; 的参数应被 shell.Fields 拒绝，禁止注入")
+	}
+
+	record := filepath.Join(t.TempDir(), "argv.txt")
+	p.ExecCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cmd := helperCommandExit(0, args...)
+		cmd.Env = append(cmd.Env, "RECORD_FILE="+record)
+		return cmd
+	}
+	code, err := p.Run(context.Background(), "nmap", "-p *", "/work/dir", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	data, _ := os.ReadFile(record)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	remote := lines[len(lines)-1]
+	if strings.Contains(remote, "-p *") {
+		t.Fatalf("glob 未引用: %s", remote)
+	}
+	if !strings.Contains(remote, "'*'") {
+		t.Fatalf("glob 应被引用为单 token: %s", remote)
+	}
+}
