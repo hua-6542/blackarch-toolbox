@@ -40,7 +40,11 @@ func helperProcess() {
 	for _, line := range args {
 		fmt.Fprintln(os.Stdout, line)
 	}
-	fmt.Fprintln(os.Stderr, "stderr-line")
+	stderrLine := os.Getenv("HELPER_STDERR")
+	if stderrLine == "" {
+		stderrLine = "stderr-line"
+	}
+	fmt.Fprintln(os.Stderr, stderrLine)
 	code, _ := strconv.Atoi(os.Getenv("EXIT_CODE"))
 	os.Exit(code)
 }
@@ -54,6 +58,12 @@ func helperCommand(args ...string) *exec.Cmd {
 func helperCommandExit(code int, args ...string) *exec.Cmd {
 	cmd := helperCommand(args...)
 	cmd.Env = append(cmd.Env, "EXIT_CODE="+strconv.Itoa(code))
+	return cmd
+}
+
+func helperCommandExitStderr(code int, stderrLine string, args ...string) *exec.Cmd {
+	cmd := helperCommandExit(code, args...)
+	cmd.Env = append(cmd.Env, "HELPER_STDERR="+stderrLine)
 	return cmd
 }
 

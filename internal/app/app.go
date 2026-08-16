@@ -24,7 +24,14 @@ import (
 const (
 	EventLogPrefix    = "toolbox:log:"
 	EventLogEndPrefix = "toolbox:logend:"
+	maxLogBufferLines = 1000
 )
+
+type execRecord struct {
+	lines    []string
+	result   map[string]any
+	finished bool
+}
 
 type App struct {
 	Cfg    *config.Config
@@ -35,6 +42,9 @@ type App struct {
 	Aud    *audit.Auditor
 	OpenFn func(name string, args ...string) error
 	emit   func(event string, data ...any)
+
+	execMu   sync.Mutex
+	execLogs map[int64]*execRecord
 }
 
 func New(cfg *config.Config, dbPath string) (*App, error) {
@@ -61,6 +71,7 @@ func New(cfg *config.Config, dbPath string) (*App, error) {
 		OpenFn: func(name string, args ...string) error {
 			return exec.Command(name, args...).Start()
 		},
+		execLogs: map[int64]*execRecord{},
 	}
 	return a, nil
 }
@@ -111,6 +122,7 @@ func (a *App) RunTool(req model.RunRequest) (model.RunResult, error) {
 }
 
 func (a *App) execute(id int64, tool model.Tool, env, args, workDir string, runner executor.Runner) {
+	a.registerExecution(id)
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 	logPath := filepath.Join(workDir, "output.log")
@@ -124,6 +136,7 @@ func (a *App) execute(id int64, tool model.Tool, env, args, workDir string, runn
 		mu.Lock()
 		logFile.WriteString(line + "\n")
 		mu.Unlock()
+		a.appendLogLine(id, line)
 		a.emitEvent(EventLogPrefix+strconv.FormatInt(id, 10), line)
 	}
 	code, runErr := runner.Run(ctx, tool.Name, args, workDir, onLine)
@@ -147,7 +160,62 @@ func (a *App) finish(id int64, tool model.Tool, env, args, workDir string, code 
 	if runErr != nil {
 		payload["error"] = runErr.Error()
 	}
+	a.storeResult(id, payload)
 	a.emitEvent(EventLogEndPrefix+strconv.FormatInt(id, 10), payload)
+}
+
+func (a *App) registerExecution(id int64) {
+	a.execMu.Lock()
+	defer a.execMu.Unlock()
+	a.execLogs[id] = &execRecord{}
+}
+
+func (a *App) appendLogLine(id int64, line string) {
+	a.execMu.Lock()
+	defer a.execMu.Unlock()
+	rec := a.execLogs[id]
+	if rec == nil {
+		return
+	}
+	rec.lines = append(rec.lines, line)
+	if len(rec.lines) > maxLogBufferLines {
+		rec.lines = append([]string(nil), rec.lines[len(rec.lines)-maxLogBufferLines:]...)
+	}
+}
+
+func (a *App) storeResult(id int64, payload map[string]any) {
+	a.execMu.Lock()
+	defer a.execMu.Unlock()
+	rec := a.execLogs[id]
+	if rec == nil {
+		rec = &execRecord{}
+		a.execLogs[id] = rec
+	}
+	rec.finished = true
+	rec.result = payload
+}
+
+func (a *App) GetExecutionLog(id int64) ([]string, error) {
+	a.execMu.Lock()
+	defer a.execMu.Unlock()
+	rec := a.execLogs[id]
+	if rec == nil {
+		return []string{}, nil
+	}
+	return append([]string(nil), rec.lines...), nil
+}
+
+func (a *App) GetExecutionResult(id int64) (map[string]any, error) {
+	a.execMu.Lock()
+	defer a.execMu.Unlock()
+	rec := a.execLogs[id]
+	if rec == nil {
+		return nil, fmt.Errorf("未知执行: %d", id)
+	}
+	if !rec.finished {
+		return map[string]any{"finished": false}, nil
+	}
+	return rec.result, nil
 }
 
 func (a *App) RunHealthCheck() ([]model.HealthCheck, error) {
@@ -163,7 +231,7 @@ func (a *App) OpenWorkspaceFile(path string) error {
 	if err != nil {
 		return err
 	}
-	if info, err := os.Stat(abs); err != nil || info.IsDir() {
+	if _, err := os.Stat(abs); err != nil {
 		return fmt.Errorf("文件不存在: %s", path)
 	}
 	return a.OpenFn("xdg-open", abs)

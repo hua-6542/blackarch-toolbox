@@ -231,8 +231,33 @@ func TestOpenWorkspaceFileMissing(t *testing.T) {
 	if err := a.OpenWorkspaceFile("no-such-file.txt"); err == nil {
 		t.Fatal("不存在文件应报错")
 	}
-	if err := a.OpenWorkspaceFile("nmap"); err == nil {
-		t.Fatal("目录应报错")
+	if err := a.OpenWorkspaceFile("../../etc/passwd"); err == nil {
+		t.Fatal("穿越应报错")
+	}
+}
+
+func TestOpenWorkspaceFileDir(t *testing.T) {
+	a, _, _ := newTestApp(t)
+	if _, err := a.WS.CreateRunDir("nmap", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var opened []string
+	a.OpenFn = func(name string, args ...string) error {
+		opened = append(opened, args...)
+		return nil
+	}
+	if err := a.OpenWorkspaceFile("nmap"); err != nil {
+		t.Fatalf("打开目录应成功: %v", err)
+	}
+	if len(opened) != 1 || opened[0] != filepath.Join(a.WS.Root, "nmap") {
+		t.Fatalf("xdg-open 参数错误: %v", opened)
+	}
+	opened = nil
+	if err := a.OpenWorkspaceFile(""); err != nil {
+		t.Fatalf("打开根目录应成功: %v", err)
+	}
+	if len(opened) != 1 || opened[0] != a.WS.Root {
+		t.Fatalf("根目录 xdg-open 参数错误: %v", opened)
 	}
 }
 
@@ -265,5 +290,112 @@ func TestOpenWorkspaceFile(t *testing.T) {
 	}
 	if len(opened) != 1 || opened[0] != filepath.Join(a.WS.Root, rel) {
 		t.Fatalf("xdg-open 参数错误: %v", opened)
+	}
+}
+
+func waitLogEnd(t *testing.T, events chan string, id int64) {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case ev := <-events:
+			if ev == EventLogEndPrefix+strconv.FormatInt(id, 10) {
+				return
+			}
+		case <-deadline:
+			t.Fatal("等待 logend 事件超时")
+		}
+	}
+}
+
+func TestGetExecutionLogAndResult(t *testing.T) {
+	a, _, events := newTestApp(t)
+	res, err := a.RunTool(model.RunRequest{Tool: "nmap", Args: "-sV", Env: "auto"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitLogEnd(t, events, res.ExecutionID)
+	lines, err := a.GetExecutionLog(res.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 || lines[0] != "line1" || lines[1] != "line2" {
+		t.Fatalf("缓冲日志不符: %v", lines)
+	}
+	result, err := a.GetExecutionResult(res.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["finished"] != nil {
+		t.Fatalf("已结束的 payload 不应含 finished 字段: %v", result)
+	}
+	if result["exit_code"] != 0 || result["work_dir"] != res.WorkDir || result["env"] != res.EnvUsed {
+		t.Fatalf("结果 payload 不符: %v", result)
+	}
+}
+
+func TestGetExecutionResultWhileRunning(t *testing.T) {
+	a, fr, _ := newTestApp(t)
+	fr.sleep = 300 * time.Millisecond
+	res, err := a.RunTool(model.RunRequest{Tool: "nmap", Env: "auto"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(3 * time.Second)
+	for {
+		fr.mu.Lock()
+		started := len(fr.calls) == 1
+		fr.mu.Unlock()
+		if started {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("等待 runner 启动超时")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	result, err := a.GetExecutionResult(res.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finished, ok := result["finished"].(bool); !ok || finished {
+		t.Fatalf("运行中应返回 finished=false: %v", result)
+	}
+}
+
+func TestGetExecutionLogUnknown(t *testing.T) {
+	a, _, _ := newTestApp(t)
+	lines, err := a.GetExecutionLog(9999)
+	if err != nil || len(lines) != 0 {
+		t.Fatalf("未知 id 应返回空日志: %v %v", lines, err)
+	}
+	if _, err := a.GetExecutionResult(9999); err == nil {
+		t.Fatal("未知 id 应报错")
+	}
+}
+
+func TestGetExecutionLogBufferCap(t *testing.T) {
+	a, _, events := newTestApp(t)
+	lines := make([]string, 0, 1005)
+	for i := 0; i < 1005; i++ {
+		lines = append(lines, "line-"+strconv.Itoa(i))
+	}
+	fr := &fakeRunner{lines: lines, code: 0}
+	a.Exec = map[string]executor.Runner{"local": fr, "podman": fr, "vm": fr}
+	res, err := a.RunTool(model.RunRequest{Tool: "nmap", Env: "auto"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitLogEnd(t, events, res.ExecutionID)
+	buf, err := a.GetExecutionLog(res.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(buf) != 1000 {
+		t.Fatalf("缓冲应截断为 1000 行, got %d", len(buf))
+	}
+	if buf[0] != "line-5" || buf[999] != "line-1004" {
+		t.Fatalf("应保留最后 1000 行: first=%q last=%q", buf[0], buf[999])
 	}
 }

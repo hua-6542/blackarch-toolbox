@@ -4,6 +4,10 @@ import {model} from '../models';
 
 export function DryRun(arg1:string,arg2:string,arg3:string):Promise<model.Decision>;
 
+export function GetExecutionLog(arg1:number):Promise<Array<string>>;
+
+export function GetExecutionResult(arg1:number):Promise<Record<string, any>>;
+
 export function GetTools(arg1:string):Promise<Array<model.Tool>>;
 
 export function ListWorkspace(arg1:string):Promise<Array<model.FileEntry>>;

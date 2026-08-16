@@ -6,6 +6,14 @@ export function DryRun(arg1, arg2, arg3) {
   return window['go']['app']['App']['DryRun'](arg1, arg2, arg3);
 }
 
+export function GetExecutionLog(arg1) {
+  return window['go']['app']['App']['GetExecutionLog'](arg1);
+}
+
+export function GetExecutionResult(arg1) {
+  return window['go']['app']['App']['GetExecutionResult'](arg1);
+}
+
 export function GetTools(arg1) {
   return window['go']['app']['App']['GetTools'](arg1);
 }

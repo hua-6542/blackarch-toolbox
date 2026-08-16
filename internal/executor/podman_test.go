@@ -56,7 +56,7 @@ func TestPodmanRetryOn125(t *testing.T) {
 	p.ExecCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		calls++
 		if calls == 1 {
-			return helperCommandExit(125, args...)
+			return helperCommandExitStderr(125, "Error: container blackarch-tools is not running", args...)
 		}
 		cmd := helperCommandExit(0, args...)
 		cmd.Env = append(cmd.Env, "RECORD_FILE="+record)
@@ -76,6 +76,25 @@ func TestPodmanRetryOn125(t *testing.T) {
 	joined := string(data)
 	if !strings.Contains(joined, "exec") {
 		t.Fatalf("重试应为 exec: %s", joined)
+	}
+}
+
+func TestPodmanExit125NoRetry(t *testing.T) {
+	p := NewPodman("blackarch-tools")
+	calls := 0
+	p.ExecCmd = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		calls++
+		return helperCommandExitStderr(125, "some tool error", args...)
+	}
+	code, err := p.Run(context.Background(), "nmap", "-sV", "/work/dir", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != 125 {
+		t.Fatalf("工具自身 125 应透传, exit = %d", code)
+	}
+	if calls != 1 {
+		t.Fatalf("不应重试, 调用次数 = %d, want 1", calls)
 	}
 }
 
