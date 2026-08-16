@@ -1,19 +1,53 @@
-# README
+# BlackArch ToolBox
 
-## About
+Arch Linux 桌面应用：管理 BlackArch 工具，提供分类浏览、一键运行（本地/Podman/VM 智能路由）、环境健康审计与产物归档。
 
-This is the official Wails Vue template.
+## 构建
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+要求：Go ≥1.21、Node ≥18、webkit2gtk-4.1、gtk3、wails v2.14.0
 
-## Live Development
+```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+wails build        # 产物: build/bin/blackarch-toolbox
+```
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## 运行
 
-## Building
+```bash
+./build/bin/blackarch-toolbox
+```
 
-To build a redistributable, production mode package, use `wails build`.
+数据与产物：
+- SQLite: `~/.local/share/blackarch-toolbox/toolbox.db`
+- 产物: `~/BlackArch_Workspace/<工具>/<时间戳>/`（含 output.log 与 .metadata.json）
+- 配置: `~/.config/blackarch-toolbox/config.yaml`（可选）
+
+```yaml
+vm:
+  host: "192.168.122.2"
+  user: "blackarch"
+  port: 22
+  name: "blackarch"
+workspace:
+  path: "~/BlackArch_Workspace"
+podman:
+  container: "blackarch-tools"
+```
+
+环境变量可覆盖：`TOOLBOX_VM_HOST` `TOOLBOX_VM_USER` `TOOLBOX_VM_PORT` `TOOLBOX_VM_NAME` `TOOLBOX_WORKSPACE` `TOOLBOX_PODMAN_CONTAINER`
+
+## 智能路由
+
+偏好设置 → 高危列表(强制 VM) → 依赖冲突(容器) → 本机存在(本地) → 兜底 VM。
+
+## 测试
+
+```bash
+go test ./internal/... -cover
+```
+
+## 同步工具列表
+
+```bash
+./scripts/import_tools.sh /usr/share/blackarch internal/db/tools.json
+```
