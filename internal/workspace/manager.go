@@ -20,6 +20,9 @@ func New(root string) *Manager {
 }
 
 func (m *Manager) CreateRunDir(tool string, now time.Time) (string, error) {
+	if tool == "" || tool == "." || tool == ".." || filepath.Base(tool) != tool {
+		return "", fmt.Errorf("非法工具名: %q", tool)
+	}
 	dir := filepath.Join(m.Root, tool, now.Format("2006-01-02_15-04-05"))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err

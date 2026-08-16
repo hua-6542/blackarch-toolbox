@@ -132,3 +132,24 @@ func TestListMissingDir(t *testing.T) {
 		t.Fatal("不存在的目录应报错")
 	}
 }
+
+func TestCreateRunDirRejectsTraversal(t *testing.T) {
+	m := newMgr(t)
+	if _, err := m.CreateRunDir("../evil", time.Now()); err == nil {
+		t.Fatal("穿越工具名应被拒绝")
+	}
+	if _, err := m.CreateRunDir("a/../../evil", time.Now()); err == nil {
+		t.Fatal("间接穿越工具名应被拒绝")
+	}
+	root, _ := filepath.Abs(m.Root)
+	if _, err := os.Stat(filepath.Join(root, "..", "evil")); !os.IsNotExist(err) {
+		t.Fatalf("Root 外不应被创建: %v", err)
+	}
+}
+
+func TestCreateRunDirRejectsEmpty(t *testing.T) {
+	m := newMgr(t)
+	if _, err := m.CreateRunDir("", time.Now()); err == nil {
+		t.Fatal("空工具名应被拒绝")
+	}
+}
