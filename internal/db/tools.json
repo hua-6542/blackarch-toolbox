@@ -1,0 +1,5 @@
+[
+  {"name": "nmap", "category": "scanner", "description": "网络扫描与主机发现", "default_env": "local", "is_high_risk": false, "dependencies": [], "icon": "🎯"},
+  {"name": "metasploit", "category": "exploitation", "description": "漏洞利用框架", "default_env": "vm", "is_high_risk": true, "dependencies": [], "icon": "💀"},
+  {"name": "beef-xss", "category": "exploitation", "description": "浏览器漏洞利用框架", "default_env": "podman", "is_high_risk": false, "dependencies": ["python2"], "icon": "🐮"}
+]
