@@ -63,6 +63,38 @@ func TestLoadFileAndOverride(t *testing.T) {
 	}
 }
 
+func TestWorkspacePathBareTilde(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TOOLBOX_WORKSPACE", "~")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.WorkspacePath(); got != home {
+		t.Fatalf("WorkspacePath = %q, want %q", got, home)
+	}
+}
+
+func TestWorkspacePathBareTildeFromFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "blackarch-toolbox")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("workspace:\n  path: \"~\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.WorkspacePath(); got != home {
+		t.Fatalf("WorkspacePath = %q, want %q", got, home)
+	}
+}
+
 func TestBadYAML(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

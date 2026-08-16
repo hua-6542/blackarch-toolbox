@@ -73,9 +73,15 @@ func applyEnv(c *Config) {
 
 func (c *Config) WorkspacePath() string {
 	p := c.Workspace.Path
-	if p == "~" || len(p) > 1 && p[:2] == "~/" {
+	if p == "~" {
 		if home, err := os.UserHomeDir(); err == nil {
-			p = filepath.Join(home, p[2:])
+			return home
+		}
+		return p
+	}
+	if len(p) > 1 && p[:2] == "~/" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, p[2:])
 		}
 	}
 	return p
